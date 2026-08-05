@@ -9,22 +9,25 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
 from scratch_agents.types import Event
 
 
+# --------------------------------------------------------------------------- #
+# Execution context and result classes
+# --------------------------------------------------------------------------- #
 @dataclass
 class ExecutionContext:
     """Central storage for all execution state."""
 
     execution_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    events: List[Event] = field(default_factory=list)
+    events: list[Event] = field(default_factory=list)
     current_step: int = 0
-    state: Dict[str, Any] = field(default_factory=dict)
-    final_result: Optional[str | BaseModel] = None
+    state: dict[str, Any] = field(default_factory=dict)
+    final_result: str | BaseModel | None = None
 
     def add_event(self, event: Event):
         """Append an event to the execution history."""

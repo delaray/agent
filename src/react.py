@@ -1,19 +1,39 @@
 
-from scratch_agents import Agent, LlmClient
-from scratch_agents.tools import calculator, search_web
-from pydantic import BaseModel, Field
-from typing import Literal, Union, List, Dict, Any, Optional
-from dataclasses import dataclass, field
-from abc import ABC, abstractmethod
-from collections.abc import Callable, Awaitable
+import asyncio
 import inspect
-from litellm import completion, acompletion
-from datetime import datetime
+import json
 import uuid
-from dotenv import load_dotenv
+from abc import ABC, abstractmethod
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any, Literal, Optional, Union
 
+from dotenv import load_dotenv
+from litellm import acompletion
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from pydantic import BaseModel, ConfigDict, Field
+
+from scratch_agents.tools.helpers import (
+    format_tool_definition,
+    function_to_input_schema,
+)
+
+SEMAPHORE = asyncio.Semaphore(3)
 
 load_dotenv()
+
+
+def _extract_text_content(result) -> str:
+    """Extract plain text from an MCP CallToolResult."""
+    parts = []
+    for item in getattr(result, "content", []) or []:
+        text = getattr(item, "text", None)
+        if text is not None:
+            parts.append(text)
+    return "\n".join(parts)
+
 
 # def test_agent():
 #     agent = Agent(
@@ -216,6 +236,8 @@ def _create_mcp_tool(mcp_tool, connection: dict) -> FunctionTool:
 
 class LlmRequest(BaseModel):
     """Request object for LLM calls."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+    
     instructions: List[str] = Field(default_factory=list)
     contents: List[ContentItem] = Field(default_factory=list)
     tools: List[BaseTool] = Field(default_factory=list)
@@ -299,7 +321,7 @@ class LlmClient:
                         "content": str(item.content[0]) if item.content else ""
                     })
 
-                    return messages
+        return messages
 
     def _parse_response(self, response) -> LlmResponse:
         """Convert API response to LlmResponse."""
@@ -336,24 +358,61 @@ class LlmClient:
 @dataclass
 class AgentResult:
     """Result of an agent execution."""
-    output: str | BaseModel
+    output: str | BaseModel | None
     context: ExecutionContext
 
 
 class Agent:
-    def __init__(self,  model: LlmClient, tools: List[BaseTool] = None,
-                 instructions: str = "",
-                 max_steps: int = 10,
-                 name: str = "agent",
-                 ):
+    def __init__(
+        self,
+        model: LlmClient,
+        tools: List[BaseTool] | None = None,
+        instructions: str = "",
+        max_steps: int = 10,
+        output_type: Optional[Type[BaseModel]] = None,  # New parameter
+    ):
         self.model = model
         self.instructions = instructions
         self.max_steps = max_steps
-        self.name = name
+        self.output_type = output_type
+        self.output_tool_name = None  # Will be set if output_type provided
         self.tools = self._setup_tools(tools or [])
 
     def _setup_tools(self, tools: List[BaseTool]) -> List[BaseTool]:
+        if self.output_type is not None:
+            @tool(
+                name="final_answer",
+                description="Return the final structured answer matching the required schema."
+            )
+            def final_answer(output: self.output_type) -> self.output_type:
+                return output
+
+            # Create a copy to avoid modifying the original
+            tools = list(tools)
+            tools.append(final_answer)
+            self.output_tool_name = "final_answer"
+        
         return tools
+
+    def _prepare_llm_request(self, context: ExecutionContext) -> LlmRequest:
+        flat_contents = []
+        for event in context.events:
+            flat_contents.extend(event.content)
+        
+        # Determine tool choice strategy
+        if self.output_tool_name:
+            tool_choice = "required"  # Force tool usage for structured output
+        elif self.tools:
+            tool_choice = "auto"
+        else:
+            tool_choice = None
+
+        return LlmRequest(
+            instructions=[self.instructions] if self.instructions else [],
+            contents=flat_contents,
+            tools=self.tools,
+            tool_choice=tool_choice,
+        )
 
     async def run(self, user_input: str,
                   context: ExecutionContext | None = None
@@ -382,13 +441,34 @@ class Agent:
         return AgentResult(output=context.final_result, context=context)
 
     def _is_final_response(self, event: Event) -> bool:
-        """Check if this event contains a final response."""
-        has_tool_calls = any(isinstance(c, ToolCall) for c in event.content)
+        if self.output_tool_name:
+            # For structured output: check if final_answer tool succeeded
+            for item in event.content:
+                if (isinstance(item, ToolResult)
+                    and item.name == self.output_tool_name
+                    and item.status == "success"):
+                    return True
+            return False
+
+        # Original logic for free-text responses
+        has_tool_calls = any(isinstance(c, ToolCall)
+                             for c in event.content)
         has_tool_results = any(isinstance(c, ToolResult)
                                for c in event.content)
         return not has_tool_calls and not has_tool_results
 
-    def _extract_final_result(self, event: Event) -> str:
+    def _extract_final_result(self, event: Event
+                              ) -> str | BaseModel | None:
+        if self.output_tool_name:
+            # Extract structured output from final_answer tool result
+            for item in event.content:
+                if (isinstance(item, ToolResult) 
+                    and item.name == self.output_tool_name
+                    and item.status == "success"
+                    and item.content):
+                    return item.content[0]
+        
+        # Original logic for free-text responses
         for item in event.content:
             if isinstance(item, Message) and item.role == "assistant":
                 return item.content
@@ -414,10 +494,11 @@ class Agent:
             c for c in llm_response.content if isinstance(c, ToolCall)]
         if tool_calls:
             tool_results = await self.act(context, tool_calls)
+            # Cast to List[ContentItem] for Event
             tool_event = Event(
                 execution_id=context.execution_id,
                 author=self.name,
-                content=tool_results,
+                content=tool_results,  # type: ignore
             )
             context.add_event(tool_event)
 
@@ -460,6 +541,38 @@ class Agent:
                     status="error",
                     content=[str(e)],
                 ))
+
+        return results
+
+
+# -------------------------------------------------------------------------
+# Sentiment Analysis Tool Example
+# -------------------------------------------------------------------------
+class SentimentAnalysis(BaseModel):
+    sentiment: Literal["positive", "negative", "neutral"]
+    confidence: float
+    key_phrases: List[str]
+
+
+async def analyze_sentiment(text: str) -> SentimentAnalysis:
+    agent = Agent(
+        model=LlmClient(model="gpt-5.4-mini"),
+        tools=[],
+        instructions="Analyze the sentiment of the provided text.",
+        output_type=SentimentAnalysis
+    )
+    query = text
+    result = await agent.run(query)
+
+    # "positive"
+    print(f"Sentiment: {result.output.sentiment}")
+    # 0.92
+    print(f"Confidence: {result.output.confidence}")
+    # ["exceeded expectations", "highly recommend"]
+    print(f"Key phrases: {result.output.key_phrases}")
+
+    return result.output
+
 
 # ****************************************************************
 # End of File

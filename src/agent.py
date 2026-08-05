@@ -1,41 +1,47 @@
 """CH04 snapshot: Basic ReAct agent
 Differences from final version:
-  - __init__: only output_type (callbacks, session, code_execution, sub_agents not present)
-  - run(): session not present, confirmation not present, code_env not present, transfer not present
+  - __init__: only output_type (callbacks, session, code_execution, sub_agents
+      not present)
+  - run(): session not present, confirmation not present, code_env not present
+    transfer not present
   - step(): before_llm_callbacks not present
   - act(): callbacks not present, confirmation check not present
-  - _setup_tools(): only final_answer (execute_python, transfer, memory not present)
+  - setup_tools(): only final_answer (execute_python, transfer,
+    memory not present)
   - _prepare_llm_request(): sandbox/skills prompt not present
 """
 
-from __future__ import annotations
+# from __future__ import annotations
 
 import logging
-from typing import Any, List, Optional, Type
+from typing import Any
 
 from pydantic import BaseModel
 
-from scratch_agents.llm import LlmClient, LlmRequest, LlmResponse
-from scratch_agents.types import Event, Message, ToolCall, ToolResult
-from scratch_agents.tools.base import BaseTool, FunctionTool, tool
-from scratch_agents.tools.helpers import format_tool_definition
 from scratch_agents.context import AgentResult, ExecutionContext
+from scratch_agents.llm import LlmClient, LlmRequest, LlmResponse
+from scratch_agents.tools.base import BaseTool, FunctionTool  #, tool
+from scratch_agents.tools.helpers import format_tool_definition
+from scratch_agents.types import Event, Message, ToolCall, ToolResult
 
 logger = logging.getLogger(__name__)
 
 
+# --------------------------------------------------------------------------- #
+# Agent class
+# --------------------------------------------------------------------------- #
 class Agent:
     """Tool-calling agent with ReAct loop."""
 
     def __init__(
         self,
         model: LlmClient,
-        tools: List[BaseTool] | None = None,
+        tools: list[BaseTool] | None = None,
         instructions: str = "",
         max_steps: int = 10,
         name: str = "agent",
         description: str = "",
-        output_type: Optional[Type[BaseModel]] = None,
+        output_type: type[BaseModel] | None = None,
     ):
         self.model = model
         self.instructions = instructions
@@ -46,10 +52,7 @@ class Agent:
         self.output_tool_name: str | None = None
         self.tools = self._setup_tools(tools or [])
 
-    # ------------------------------------------------------------------ #
     # Core loop
-    # ------------------------------------------------------------------ #
-
     async def run(
         self,
         user_input: str | None = None,
@@ -68,16 +71,21 @@ class Agent:
             )
             context.add_event(user_event)
 
-        while not context.final_result and context.current_step < self.max_steps:
+        while (
+            not context.final_result
+            and context.current_step < self.max_steps
+        ):
             await self.step(context, verbose=verbose)
 
             if context.events:
                 last_event = context.events[-1]
                 if self._is_final_response(last_event):
-                    context.final_result = self._extract_final_result(last_event)
+                    context.final_result = \
+                        self._extract_final_result(last_event)
 
         return AgentResult(output=context.final_result, context=context)
 
+    # Step and action methods
     async def step(
         self,
         context: ExecutionContext,
@@ -97,12 +105,14 @@ class Agent:
         )
         context.add_event(response_event)
 
-        tool_calls = [c for c in llm_response.content if isinstance(c, ToolCall)]
+        tool_calls = [c for c in llm_response.content
+                      if isinstance(c, ToolCall)]
         if tool_calls:
             await self.act(context, tool_calls)
 
         context.increment_step()
 
+    # Think and act methods
     async def think(self, llm_request: LlmRequest) -> LlmResponse:
         """Call the LLM to decide the next action."""
         return await self.model.generate(llm_request)
@@ -110,7 +120,7 @@ class Agent:
     async def act(
         self,
         context: ExecutionContext,
-        tool_calls: List[ToolCall],
+        tool_calls: list[ToolCall],
     ) -> None:
         """Execute the tools requested by the LLM."""
         tools_dict = {t.name: t for t in self.tools}
@@ -136,7 +146,7 @@ class Agent:
                     status="success",
                     content=[output],
                 ))
-            except Exception as e:
+            except (TypeError, ValueError, KeyError, RuntimeError) as e:
                 results.append(ToolResult(
                     tool_call_id=tool_call.tool_call_id,
                     name=tool_call.name,
@@ -152,10 +162,7 @@ class Agent:
             )
             context.add_event(tool_event)
 
-    # ------------------------------------------------------------------ #
     # Internal methods
-    # ------------------------------------------------------------------ #
-
     def _prepare_llm_request(self, context: ExecutionContext) -> LlmRequest:
         """Build an LlmRequest from the current context."""
         flat_contents = []
@@ -193,7 +200,8 @@ class Agent:
             return False
 
         has_tool_calls = any(isinstance(c, ToolCall) for c in event.content)
-        has_tool_results = any(isinstance(c, ToolResult) for c in event.content)
+        has_tool_results = any(isinstance(c, ToolResult)
+                               for c in event.content)
         return not has_tool_calls and not has_tool_results
 
     def _extract_final_result(self, event: Event) -> Any:
@@ -213,7 +221,7 @@ class Agent:
                 return item.content
         return None
 
-    def _setup_tools(self, tools: List[BaseTool]) -> List[BaseTool]:
+    def _setup_tools(self, tools: list[BaseTool]) -> list[BaseTool]:
         """Prepare the tools list, including dynamic tools."""
         tools = list(tools)
 
@@ -224,7 +232,7 @@ class Agent:
 
             tool_definition = format_tool_definition(
                 "final_answer",
-                "Return the final structured answer matching the required schema.",
+                "Return the final structured answer matching the schema.",
                 {
                     "type": "object",
                     "properties": {"output": output_schema},
@@ -234,7 +242,7 @@ class Agent:
 
             captured_type = self.output_type
 
-            def _parse_output(output) -> str:
+            def _parse_output(output) -> str | BaseModel:
                 if isinstance(output, dict):
                     return captured_type.model_validate(output)
                 return output
@@ -242,7 +250,10 @@ class Agent:
             final_answer_tool = FunctionTool(
                 func=_parse_output,
                 name="final_answer",
-                description="Return the final structured answer matching the required schema.",
+                description=(
+                    "Return the final structured answer matching the "
+                    "required schema."
+                ),
                 tool_definition=tool_definition,
             )
             tools.append(final_answer_tool)
@@ -256,4 +267,9 @@ class Agent:
             if isinstance(item, Message):
                 logger.info(f"[{self.name}] {item.content}")
             elif isinstance(item, ToolCall):
-                logger.info(f"[{self.name}] Tool call: {item.name}({item.arguments})")
+                logger.info(f"[{self.name}] "
+                            f"Tool call: {item.name}({item.arguments})")
+
+# -------------------------------------------------------------------------- #
+# End of File
+# -------------------------------------------------------------------------- #

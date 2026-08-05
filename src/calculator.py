@@ -2,6 +2,7 @@
 import json
 from litellm import completion
 from dotenv import load_dotenv
+from pprint import pprint
 
 load_dotenv(override=True)
 
@@ -77,8 +78,8 @@ def example1():
     )
 
     print("\n# Multiplication question needs a tool call")
-    print(response_with_tool.choices[0].message.content)
-    print(response_with_tool.choices[0].message.tool_calls)
+    pprint(response_with_tool.choices[0].message.content)
+    pprint(response_with_tool.choices[0].message.tool_calls)
 
     # Feed result back to LLM
     ai_message = response_with_tool.choices[0].message
@@ -88,7 +89,7 @@ def example1():
             function_args = json.loads(tool_call.function.arguments)
             if function_name == "calculator":
                 result = calculator(**function_args)
-                print(f"\n{function_name}({function_args}) -> {result}")
+                pprint(f"\n{function_name}({function_args}) -> {result}")
 
     # We append the assistant's tool-call message, the tool role result,
     # and let the model produce a final answer.
@@ -119,9 +120,20 @@ def example1():
         messages=messages,
     )
 
-    print("\nMessages:", messages)
-    print("\nFinal Answer:", final_response.choices[0].message.content)
+    print(f"\nMessages:")
+    pprint(messages)
+    print(f"\nFinal Answer:")
+    pprint(final_response.choices[0].message.content)
 
+
+def main():
+    example1()
+
+
+# -------------------------------------------------------------------------
+
+if __name__ == "__main__":
+    main()
 
 # ---------------------------------------------------------------------
 # End of File
