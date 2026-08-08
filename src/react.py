@@ -1,13 +1,13 @@
 
-import asyncio
+import asyncio  # noqa: I001
 import inspect
 import json
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal
 
 from dotenv import load_dotenv
 from litellm import acompletion
@@ -20,10 +20,18 @@ from scratch_agents.tools.helpers import (
     function_to_input_schema,
 )
 
+from src.types import Event, Message, ToolCall, ToolResult, ContentItem
+from src.context import AgentResult, ExecutionContext
+
 SEMAPHORE = asyncio.Semaphore(3)
 
-load_dotenv()
+# Load environment variables from .env file
+load_dotenv(override=True)
 
+
+# ---------------------------------------------------------------------------
+# Helper function to extract text content from MCP CallToolResult
+# ---------------------------------------------------------------------------
 
 def _extract_text_content(result) -> str:
     """Extract plain text from an MCP CallToolResult."""
@@ -50,63 +58,6 @@ def _extract_text_content(result) -> str:
 # ****************************************************************
 # Part 1: Implementing the Agent
 # ****************************************************************
-
-class Message(BaseModel):
-    """A text message in the conversation."""
-    type: Literal["message"] = "message"
-    role: Literal["system", "user", "assistant"]
-    content: str
-
-
-class ToolCall(BaseModel):
-    """LLM's request to execute a tool."""
-    type: Literal["tool_call"] = "tool_call"
-    tool_call_id: str
-    name: str
-    arguments: dict
-
-
-class ToolResult(BaseModel):
-    """Result from tool execution."""
-    type: Literal["tool_result"] = "tool_result"
-    tool_call_id: str
-    name: str
-    status: Literal["success", "error"]
-    content: list
-
-
-ContentItem = Union[Message, ToolCall, ToolResult]
-
-
-class Event(BaseModel):
-    """A recorded occurrence during agent execution."""
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    execution_id: str
-    timestamp: float = Field(
-        default_factory=lambda: datetime.now().timestamp())
-    author: str  # "user" or agent name
-    content: List[ContentItem] = Field(default_factory=list)
-
-
-@dataclass
-class ExecutionContext:
-    """Central storage for all execution state."""
-
-    execution_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    events: List[Event] = field(default_factory=list)
-    current_step: int = 0
-    state: Dict[str, Any] = field(default_factory=dict)
-    final_result: Optional[str | BaseModel] = None
-
-    def add_event(self, event: Event):
-        """Append an event to the execution history."""
-        self.events.append(event)
-
-    def increment_step(self):
-        """Move to the next execution step."""
-        self.current_step += 1
-
-
 class BaseTool(ABC):
     """Abstract base class for all tools."""
 
@@ -114,14 +65,14 @@ class BaseTool(ABC):
         self,
         name: str | None = None,
         description: str | None = None,
-        tool_definition: Dict[str, Any] | None = None,
+        tool_definition: dict[str, Any] | None = None,
     ):
         self.name = name or self.__class__.__name__
         self.description = description or self.__doc__ or ""
         self._tool_definition = tool_definition
 
     @property
-    def tool_definition(self) -> Dict[str, Any] | None:
+    def tool_definition(self) -> dict[str, Any] | None:
         return self._tool_definition
 
     @abstractmethod
@@ -144,7 +95,7 @@ class FunctionTool(BaseTool):
         func: Callable,
         name: str | None = None,
         description: str | None = None,
-        tool_definition: Dict[str, Any] | None = None
+        tool_definition: dict[str, Any] | None = None
     ):
         self.func = func
         self.needs_context = 'context' in inspect.signature(func).parameters
@@ -171,11 +122,38 @@ class FunctionTool(BaseTool):
             return await result
         return result
 
-    def _generate_definition(self) -> Dict[str, Any]:
+    def _generate_definition(self) -> dict[str, Any]:
         """Generate tool definition from function signature."""
         parameters = function_to_input_schema(self.func)
         return format_tool_definition(self.name, self.description, parameters)
 
+
+def tool(func=None, *, name=None, description=None, sandbox_executable=False,
+         requires_confirmation=False, confirmation_message=None):
+    """Decorator to create a FunctionTool from a function.
+
+    Can be used with or without arguments:
+        @tool
+        def my_func(...): ...
+
+        @tool(name="custom_name", description="Custom description")
+        def my_func(...): ...
+    """
+    def decorator(f):
+        return FunctionTool(
+            func=f,
+            name=name,
+            description=description,
+            # sandbox_executable=sandbox_executable,
+            # requires_confirmation=requires_confirmation,
+            # confirmation_message_template=confirmation_message or "",
+        )
+
+    if func is not None:
+        # Called without arguments: @tool
+        return decorator(func)
+    # Called with arguments: @tool(name=...)
+    return decorator
 
 # -----------------------------------------------------------------------
 # Load MCP Tool
@@ -186,14 +164,15 @@ async def load_mcp_tools(connection: dict) -> list[BaseTool]:
     """Load tools from an MCP server and convert to FunctionTools."""
     tools = []
 
-    async with stdio_client(StdioServerParameters(**connection)) as (read, write):
-        async with ClientSession(read, write) as session:
-            await session.initialize()
-            mcp_tools = await session.list_tools()
+    params = StdioServerParameters(**connection)
+    async with stdio_client(params) as (read, write), \
+            ClientSession(read, write) as session:
+        await session.initialize()
+        mcp_tools = await session.list_tools()
 
-            for mcp_tool in mcp_tools.tools:
-                func_tool = _create_mcp_tool(mcp_tool, connection)
-                tools.append(func_tool)
+        for mcp_tool in mcp_tools.tools:
+            func_tool = _create_mcp_tool(mcp_tool, connection)
+            tools.append(func_tool)
 
     return tools
 
@@ -202,16 +181,16 @@ async def load_mcp_tools(connection: dict) -> list[BaseTool]:
 # Create MCP Tool
 # -----------------------------------------------------------------------
 
-
 def _create_mcp_tool(mcp_tool, connection: dict) -> FunctionTool:
     """Create a FunctionTool that wraps an MCP tool."""
 
     async def call_mcp(**kwargs):
-        async with stdio_client(StdioServerParameters(**connection)) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                result = await session.call_tool(mcp_tool.name, kwargs)
-                return _extract_text_content(result)
+        params = StdioServerParameters(**connection)
+        async with stdio_client(params) as (read, write), \
+                ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool(mcp_tool.name, kwargs)
+            return _extract_text_content(result)
 
     tool_definition = {
         "type": "function",
@@ -237,20 +216,20 @@ def _create_mcp_tool(mcp_tool, connection: dict) -> FunctionTool:
 class LlmRequest(BaseModel):
     """Request object for LLM calls."""
     model_config = ConfigDict(arbitrary_types_allowed=True)
-    
-    instructions: List[str] = Field(default_factory=list)
-    contents: List[ContentItem] = Field(default_factory=list)
-    tools: List[BaseTool] = Field(default_factory=list)
-    tool_choice: Optional[str] = None
+
+    instructions: list[str] = Field(default_factory=list)
+    contents: list[ContentItem] = Field(default_factory=list)
+    tools: list[BaseTool] = Field(default_factory=list)
+    tool_choice: str | None = None
 
 
 # -----------------------------------------------------------------------
 
 class LlmResponse(BaseModel):
     """Response object from LLM calls."""
-    content: List[ContentItem] = Field(default_factory=list)
-    error_message: Optional[str] = None
-    usage_metadata: Dict[str, Any] = Field(default_factory=dict)
+    content: list[ContentItem] = Field(default_factory=list)
+    error_message: str | None = None
+    usage_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 # -----------------------------------------------------------------------
@@ -267,7 +246,8 @@ class LlmClient:
         try:
             messages = self._build_messages(request)
             tools = [
-                t.tool_definition for t in request.tools] if request.tools else None
+                t.tool_definition for t in request.tools
+            ] if request.tools else None
 
             response = await acompletion(
                 model=self.model,
@@ -279,10 +259,10 @@ class LlmClient:
             )
 
             return self._parse_response(response)
-        except Exception as e:
+        except (ValueError, KeyError, RuntimeError) as e:
             return LlmResponse(error_message=str(e))
 
-    def _build_messages(self, request: LlmRequest) -> List[dict]:
+    def _build_messages(self, request: LlmRequest) -> list[dict]:
         """Convert LlmRequest to API message format."""
         messages = []
 
@@ -356,7 +336,7 @@ class LlmClient:
 # ****************************************************************
 
 @dataclass
-class AgentResult:
+class AgenRtesult:
     """Result of an agent execution."""
     output: str | BaseModel | None
     context: ExecutionContext
@@ -366,10 +346,10 @@ class Agent:
     def __init__(
         self,
         model: LlmClient,
-        tools: List[BaseTool] | None = None,
+        tools: list[BaseTool] | None = None,
         instructions: str = "",
         max_steps: int = 10,
-        output_type: Optional[Type[BaseModel]] = None,  # New parameter
+        output_type: type[BaseModel] | None = None
     ):
         self.model = model
         self.instructions = instructions
@@ -378,27 +358,28 @@ class Agent:
         self.output_tool_name = None  # Will be set if output_type provided
         self.tools = self._setup_tools(tools or [])
 
-    def _setup_tools(self, tools: List[BaseTool]) -> List[BaseTool]:
+    def _setup_tools(self, tools: list[BaseTool] | Any
+                     ) -> list[BaseTool] | Any:
         if self.output_type is not None:
             @tool(
                 name="final_answer",
                 description="Return the final structured answer matching the required schema."
             )
-            def final_answer(output: self.output_type) -> self.output_type:
+            def final_answer(output):
                 return output
 
-            # Create a copy to avoid modifying the original
+            # Create a copy to avoid modifying the original``
             tools = list(tools)
             tools.append(final_answer)
             self.output_tool_name = "final_answer"
-        
+
         return tools
 
     def _prepare_llm_request(self, context: ExecutionContext) -> LlmRequest:
         flat_contents = []
         for event in context.events:
             flat_contents.extend(event.content)
-        
+
         # Determine tool choice strategy
         if self.output_tool_name:
             tool_choice = "required"  # Force tool usage for structured output
@@ -430,7 +411,10 @@ class Agent:
         context.add_event(user_event)
 
         # Execute steps until completion or max steps reached
-        while not context.final_result and context.current_step < self.max_steps:
+        while (
+            not context.final_result
+            and context.current_step < self.max_steps
+        ):
             await self.step(context)
 
         # Check if the last event is a final response
@@ -462,12 +446,12 @@ class Agent:
         if self.output_tool_name:
             # Extract structured output from final_answer tool result
             for item in event.content:
-                if (isinstance(item, ToolResult) 
+                if (isinstance(item, ToolResult)
                     and item.name == self.output_tool_name
                     and item.status == "success"
                     and item.content):
                     return item.content[0]
-        
+
         # Original logic for free-text responses
         for item in event.content:
             if isinstance(item, Message) and item.role == "assistant":
@@ -484,7 +468,7 @@ class Agent:
         # Record LLM response as an event
         response_event = Event(
             execution_id=context.execution_id,
-            author=self.name,
+            author='LLM',
             content=llm_response.content,
         )
         context.add_event(response_event)
@@ -497,7 +481,7 @@ class Agent:
             # Cast to List[ContentItem] for Event
             tool_event = Event(
                 execution_id=context.execution_id,
-                author=self.name,
+                author='LLM',
                 content=tool_results,  # type: ignore
             )
             context.add_event(tool_event)
@@ -509,8 +493,8 @@ class Agent:
 
     async def act(self,
                   context: ExecutionContext,
-                  tool_calls: List[ToolCall]
-                  ) -> List[ToolResult]:
+                  tool_calls: list[ToolCall]
+                  ) -> list[ToolResult]:
         tools_dict = {tool.name: tool for tool in self.tools}
         results = []
 
@@ -534,7 +518,7 @@ class Agent:
                     status="success",
                     content=[output],
                 ))
-            except Exception as e:
+            except (ValueError, TypeError, KeyError, RuntimeError) as e:
                 results.append(ToolResult(
                     tool_call_id=tool_call.tool_call_id,
                     name=tool_call.name,
@@ -551,7 +535,7 @@ class Agent:
 class SentimentAnalysis(BaseModel):
     sentiment: Literal["positive", "negative", "neutral"]
     confidence: float
-    key_phrases: List[str]
+    key_phrases: list[str]
 
 
 async def analyze_sentiment(text: str) -> SentimentAnalysis:

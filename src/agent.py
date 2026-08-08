@@ -11,8 +11,6 @@ Differences from final version:
   - _prepare_llm_request(): sandbox/skills prompt not present
 """
 
-# from __future__ import annotations
-
 import logging
 from typing import Any
 
@@ -20,9 +18,9 @@ from pydantic import BaseModel
 
 from scratch_agents.context import AgentResult, ExecutionContext
 from scratch_agents.llm import LlmClient, LlmRequest, LlmResponse
-from scratch_agents.tools.base import BaseTool, FunctionTool  #, tool
+from scratch_agents.tools.base import BaseTool, FunctionTool
 from scratch_agents.tools.helpers import format_tool_definition
-from scratch_agents.types import Event, Message, ToolCall, ToolResult
+from src.types import Event, Message, ToolCall, ToolResult
 
 logger = logging.getLogger(__name__)
 

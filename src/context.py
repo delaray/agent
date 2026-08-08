@@ -13,7 +13,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from scratch_agents.types import Event
+from src.types import Event
 
 
 # --------------------------------------------------------------------------- #
