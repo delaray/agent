@@ -28,4 +28,8 @@ dependencies = [
     "python-docx>=1.0.0",
     "pre-commit>=4.6.0",
     "scratchagent>=0.1.0",
+    "aitils",
 ]
+
+[tool.uv.sources]
+aitils = { git = "ssh://git@github.com/delaray/aitils", rev = "main" }

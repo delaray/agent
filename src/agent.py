@@ -1,4 +1,9 @@
-"""CH04 snapshot: Basic ReAct agent
+# --------------------------------------------------------------------------- #
+# Basic OperationaL Agent class
+# --------------------------------------------------------------------------- #
+
+"""
+Basic ReAct agent
 Differences from final version:
   - __init__: only output_type (callbacks, session, code_execution, sub_agents
       not present)
@@ -11,17 +16,27 @@ Differences from final version:
   - _prepare_llm_request(): sandbox/skills prompt not present
 """
 
-import logging
+import logging  # noqa: I001
 from typing import Any
 
+from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from scratch_agents.context import AgentResult, ExecutionContext
 from scratch_agents.llm import LlmClient, LlmRequest, LlmResponse
-from scratch_agents.tools.base import BaseTool, FunctionTool
 from scratch_agents.tools.helpers import format_tool_definition
+
+from src.tools import BaseTool, FunctionTool
 from src.types import Event, Message, ToolCall, ToolResult
 
+# --------------------------------------------------------------------------- #
+# Environment setup and Logging
+# --------------------------------------------------------------------------- #
+
+# Load environment variables from .env file
+load_dotenv(override=True)
+
+# Initialize logging
 logger = logging.getLogger(__name__)
 
 
