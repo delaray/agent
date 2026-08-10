@@ -66,20 +66,21 @@ class Agent:
         self.tools = self._setup_tools(tools or [])
 
     # Core loop
-    async def run(
-        self,
-        user_input: str | None = None,
-        context: ExecutionContext | None = None,
-        verbose: bool = False,
-    ) -> AgentResult:
-        """Execute the agent."""
+    async def run(self,
+                  user_input: str | None = None,
+                  context: ExecutionContext | None = None,
+                  verbose: bool = False,
+                  ) -> AgentResult:
+        """
+        Execute the agent.
+        """
         if context is None:
             context = ExecutionContext()
 
         if user_input:
             user_event = Event(
                 execution_id=context.execution_id,
-                author="user",
+                author=self.name,
                 content=[Message(role="user", content=user_input)],
             )
             context.add_event(user_event)

@@ -6,7 +6,6 @@ import os  # noqa: I001, RUF100
 from tavily import TavilyClient
 from dotenv import load_dotenv
 
-
 import inspect
 import json
 from abc import ABC, abstractmethod
@@ -22,8 +21,8 @@ from src.context import ExecutionContext
 if TYPE_CHECKING:
     from scratch_agents.llm import LlmRequest
 
-
-load_dotenv(override=True)  # Load environment variables from .env file
+# Load environment variables from .env file
+load_dotenv(override=True)
 
 # -----------------------------------------------------------------------------
 # Tavily Web Search Tool
@@ -195,6 +194,10 @@ class FunctionTool(BaseTool):
         return '\n'.join(filtered_lines)
 
 
+# -----------------------------------------------------------------------------
+# Decorator to create a FunctionTool
+# -----------------------------------------------------------------------------
+
 def tool(func=None, *, name=None, description=None, sandbox_executable=False,
          requires_confirmation=False, confirmation_message=None):
     """Decorator to create a FunctionTool from a function.
@@ -222,6 +225,10 @@ def tool(func=None, *, name=None, description=None, sandbox_executable=False,
     # Called with arguments: @tool(name=...)
     return decorator
 
+
+# -----------------------------------------------------------------------------
+# Function to convert a Python function to an input schema
+# -----------------------------------------------------------------------------
 
 def function_to_input_schema(func) -> dict:
     """Convert a function's signature to a JSON Schema for tool parameters.
@@ -257,10 +264,20 @@ def function_to_input_schema(func) -> dict:
             prop["type"] = "number"
         elif hint == bool:
             prop["type"] = "boolean"
-        elif hint == list or (hasattr(hint, "__origin__") and hint.__origin__ is list):
+        elif hint == list or (
+            hint
+            and (
+                hasattr(hint, "__origin__")
+                and hint.__origin__ is list
+            )
+        ):
             prop["type"] = "array"
             # Try to get item type
-            if hint is not None and hasattr(hint, "__args__") and hint.__args__:
+            if (
+                hint is not None
+                and hasattr(hint, "__args__")
+                and hint.__args__
+            ):
                 item_type = hint.__args__[0]
                 if item_type == str:
                     prop["items"] = {"type": "string"}
@@ -270,7 +287,10 @@ def function_to_input_schema(func) -> dict:
                     prop["items"] = item_type.model_json_schema()
         elif hasattr(hint, "model_json_schema"):
             # Pydantic model
-            prop = hint.model_json_schema() if hint is not None else {"type": "object"}
+            if hint is not None:
+                prop = hint.model_json_schema()
+            else:
+                prop = {"type": "object"}
         else:
             prop["type"] = "string"
 
@@ -292,8 +312,12 @@ def function_to_input_schema(func) -> dict:
     return schema
 
 
+# -----------------------------------------------------------------------------
+# Format tool definition in OpenAI function calling format
+# -----------------------------------------------------------------------------
+
 def format_tool_definition(name: str, description: str, parameters: dict
-                            ) -> dict:
+                           ) -> dict:
     """Format a tool definition in the OpenAI function calling format."""
     return {
         "type": "function",
@@ -305,6 +329,10 @@ def format_tool_definition(name: str, description: str, parameters: dict
     }
 
 
+# -----------------------------------------------------------------------------
+# Convert a Python function to an OpenAI-format tool definition
+# -----------------------------------------------------------------------------
+
 def function_to_tool_definition(func) -> dict:
     """Convert a Python function to an OpenAI-format tool definition.
 
@@ -315,6 +343,10 @@ def function_to_tool_definition(func) -> dict:
     parameters = function_to_input_schema(func)
     return format_tool_definition(name, description, parameters)
 
+
+# -----------------------------------------------------------------------------
+# Execute a tool call using a tool_box mapping
+# -----------------------------------------------------------------------------
 
 def tool_execution(tool_box: dict, tool_call) -> str:
     """Execute a tool call using a tool_box mapping.
@@ -338,3 +370,7 @@ def tool_execution(tool_box: dict, tool_call) -> str:
         return f"Error executing {func_name}: invalid arguments: {e!s}"
 
     return str(result)
+
+# ------------------------------------------------------------------------------
+# End of File
+# -----------------------------------------------------------------------------
