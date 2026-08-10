@@ -1,8 +1,9 @@
 # Setup
-import json
+import json  # noqa: I001
 from litellm import completion
 from dotenv import load_dotenv
 from pprint import pprint
+from typing import Any, cast
 
 load_dotenv(override=True)
 
@@ -59,23 +60,24 @@ def calculator(operator: str, first_number: float, second_number: float):
 def example1():
     tools = [calculator_tool_definition]
 
-    response_without_tool = completion(
+    response_without_tool = cast(Any, completion(
         model='gpt-5.4-mini',
         messages=[
-            {"role": "user", "content": "What is the capital of South Korea?"}],
+            {"role": "user",
+             "content": "What is the capital of South Korea?"}],
         tools=tools,
-    )
+    ))
 
     print("# Capital question doesn't need a tool call")
     print(response_without_tool.choices[0].message.content)
     print(response_without_tool.choices[0].message.tool_calls)
 
     # Response with tool_calls
-    response_with_tool = completion(
+    response_with_tool = cast(Any, completion(
         model='gpt-5.4-mini',
         messages=[{"role": "user", "content": "What is 1234 x 5678?"}],
         tools=tools,
-    )
+    ))
 
     print("\n# Multiplication question needs a tool call")
     pprint(response_with_tool.choices[0].message.content)
@@ -105,24 +107,26 @@ def example1():
 
     if ai_message.tool_calls:
         for tool_call in ai_message.tool_calls:
-            function_name = tool_call.function.name  # B: parse + execute the tool
+            # B: parse + execute the tool
+            function_name = tool_call.function.name
             function_args = json.loads(tool_call.function.arguments)
             if function_name == "calculator":
                 result = calculator(**function_args)
-                messages.append({                    # C: append the tool result
+                # C: append the tool result
+                messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": str(result),
                 })
 
-    final_response = completion(
+    final_response = cast(Any, completion(
         model='gpt-5.4-mini',
         messages=messages,
-    )
+    ))
 
-    print(f"\nMessages:")
+    print("\nMessages:")
     pprint(messages)
-    print(f"\nFinal Answer:")
+    print("\nFinal Answer:")
     pprint(final_response.choices[0].message.content)
 
 
