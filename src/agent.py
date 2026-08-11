@@ -17,17 +17,16 @@ Differences from final version:
 """
 
 import logging  # noqa: I001
-from typing import Any
+from typing import Any, Sequence, cast  # noqa: UP035
 
 from dotenv import load_dotenv
 from pydantic import BaseModel
 
-from scratch_agents.context import AgentResult, ExecutionContext
-from scratch_agents.llm import LlmClient, LlmRequest, LlmResponse
-from scratch_agents.tools.helpers import format_tool_definition
+from src.llm import LlmClient, LlmRequest, LlmResponse
 
-from src.tools import BaseTool, FunctionTool
+from src.tools import BaseTool, FunctionTool, format_tool_definition
 from src.types import Event, Message, ToolCall, ToolResult
+from src.context import ExecutionContext, AgentResult
 
 # --------------------------------------------------------------------------- #
 # Environment setup and Logging
@@ -49,7 +48,7 @@ class Agent:
     def __init__(
         self,
         model: LlmClient,
-        tools: list[BaseTool] | None = None,
+        tools: Sequence[BaseTool] | None = None,
         instructions: str = "",
         max_steps: int = 10,
         name: str = "agent",
@@ -63,7 +62,7 @@ class Agent:
         self.description = description
         self.output_type = output_type
         self.output_tool_name: str | None = None
-        self.tools = self._setup_tools(tools or [])
+        self.tools = self._setup_tools(list(tools or []))
 
     # Core loop
     async def run(self,
@@ -119,8 +118,10 @@ class Agent:
         )
         context.add_event(response_event)
 
-        tool_calls = [c for c in llm_response.content
-                      if isinstance(c, ToolCall)]
+        tool_calls = cast(
+            list[ToolCall],
+            [c for c in llm_response.content if isinstance(c, ToolCall)],
+        )
         if tool_calls:
             await self.act(context, tool_calls)
 

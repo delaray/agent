@@ -5,12 +5,10 @@ Differences from final version:
   - AgentResult status/pending_tool_calls not present
 """
 
-from __future__ import annotations
-
+from __future__ import annotations  # noqa: I001
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
-
 from pydantic import BaseModel
 
 from src.types import Event
@@ -38,8 +36,16 @@ class ExecutionContext:
         self.current_step += 1
 
 
+# --------------------------------------------------------------------------- #
 @dataclass
 class AgentResult:
     """Result of an agent execution."""
     output: Any  # str | BaseModel
     context: ExecutionContext
+    status: str = "complete"  # "complete" | "pending_confirmation" | "error"
+    pending_tool_calls: list = field(default_factory=list)
+
+# --------------------------------------------------------------------------- #
+# End of File
+# --------------------------------------------------------------------------- #
+

@@ -1,14 +1,13 @@
 """Execution context and result types for the scratch_agents framework."""
 
-from __future__ import annotations
+from __future__ import annotations  # noqa: I001
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
-
+from typing import Any
 from pydantic import BaseModel
 
-from scratch_agents.types import Event
+from src.types import Event, ToolCall
 
 
 @dataclass
@@ -16,20 +15,20 @@ class ExecutionContext:
     """Central storage for all execution state."""
 
     execution_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-    events: List[Event] = field(default_factory=list)
+    events: list[Event] = field(default_factory=list)
     current_step: int = 0
-    state: Dict[str, Any] = field(default_factory=dict)
-    final_result: Optional[str | BaseModel] = None
+    state: dict[str, Any] = field(default_factory=dict)
+    final_result: str | BaseModel | None = None
     # CH06 session
-    session: Optional[Any] = None
-    session_manager: Optional[Any] = None
+    session: Any = None
+    session_manager: Any = None
     # CH06 long-term memory
-    memory_manager: Optional[Any] = None
+    memory_manager: Any = None
     # CH08 code execution
-    code_env: Optional[Any] = None  # E2B Sandbox
+    code_env: Any = None  # E2B Sandbox
     # CH09 agent transfer
-    transfer_to: Optional[str] = None
-    transfer_tools: Dict[str, Any] = field(default_factory=dict)
+    transfer_to: str | None = None
+    transfer_tools: dict[str, Any] = field(default_factory=dict)
 
     def add_event(self, event: Event):
         """Append an event to the execution history."""
@@ -51,7 +50,7 @@ class AgentResult:
 
 class PendingToolCall(BaseModel):
     """A tool call awaiting user confirmation (CH06 human-in-the-loop)."""
-    tool_call: "ToolCall"
+    tool_call: ToolCall
     confirmation_message: str
 
 
@@ -62,8 +61,6 @@ class ToolConfirmation(BaseModel):
     modified_arguments: dict | None = None
     reason: str | None = None
 
-
-# Avoid circular import — resolve forward reference
-from scratch_agents.types import ToolCall  # noqa: E402
-
-PendingToolCall.model_rebuild()
+# --------------------------------------------------------------------------- #
+# End of File
+# --------------------------------------------------------------------------- #
