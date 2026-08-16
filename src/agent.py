@@ -16,7 +16,8 @@ Differences from final version:
   - _prepare_llm_request(): sandbox/skills prompt not present
 """
 
-import logging  # noqa: I001
+import asyncio  # noqa: I001
+import logging  # noqa: I001, RUF100
 from typing import Any, Sequence, cast  # noqa: UP035
 
 from dotenv import load_dotenv
@@ -285,6 +286,25 @@ class Agent:
                 logger.info(f"[{self.name}] "
                             f"Tool call: {item.name}({item.arguments})")
 
+
+# --------------------------------------------------------------------------- #
+# Test function for the agent
+# --------------------------------------------------------------------------- #
+
+def test_agent():
+    """Test the agent with a simple example."""
+
+    # Initialize the agent
+    llm_client = LlmClient(model="gpt-5-mini")
+    tools = []
+    agent = Agent(model=llm_client, tools=tools,
+                  instructions="You are an assistant.")
+
+    # Run the agent with a simple input
+    result = asyncio.run(agent.run(user_input="What is 2 + 2?"))
+    
+    # Print the final result
+    print("Final Result:", result.output)
 # -------------------------------------------------------------------------- #
 # End of File
 # -------------------------------------------------------------------------- #

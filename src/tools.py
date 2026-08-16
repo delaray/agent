@@ -50,7 +50,7 @@ def search_web(query: str) -> dict | None:
     return response.get("results")
 
 # Listing 3.14
-# rint(search_web("Kipchoge's marathon world record"))
+# pxsrint(search_web("Kipchoge's marathon world record"))
 
 
 # ----------------------------------------------------------------------------
