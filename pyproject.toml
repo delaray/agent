@@ -29,6 +29,7 @@ dependencies = [
     "pre-commit>=4.6.0",
     "scratchagent>=0.1.0",
     "aitils",
+    "argparse>=1.4.0",
 ]
 
 [tool.uv.sources]

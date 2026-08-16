@@ -16,6 +16,13 @@ Differences from final version:
   - _prepare_llm_request(): sandbox/skills prompt not present
 """
 
+# Direct execution puts ``src/`` first on sys.path, which would make
+# ``src/types.py`` shadow Python's standard-library ``types`` module.
+import sys
+
+if __package__ in (None, ""):
+    sys.path[0] = __file__.rsplit("/", 2)[0]
+
 import argparse  # noqa: I001
 import asyncio  # noqa: I001, RUF100
 import logging  # noqa: I001, RUF100
