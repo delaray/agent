@@ -2,6 +2,7 @@ import asyncio
 
 from pydantic import BaseModel
 
+from src import agent as agent_module
 from src.agent import Agent
 from src.context import ExecutionContext
 from src.llm import LlmResponse
@@ -83,3 +84,23 @@ def test_structured_output_tool_returns_validated_model():
     result = asyncio.run(Agent(client, output_type=Answer).run("answer"))
     assert result.output == Answer(value=42)
     assert client.requests[0].tool_choice == "required"
+
+
+def test_main_accepts_query_model_and_provider(monkeypatch, capsys):
+    captured = {}
+
+    class CliClient:
+        def __init__(self, model=None, provider=None):
+            captured.update(model=model, provider=provider)
+
+        async def generate(self, request):
+            return LlmResponse(content=[
+                Message(role="assistant", content="command-line answer")
+            ])
+
+    monkeypatch.setattr(agent_module, "LlmClient", CliClient)
+
+    agent_module.main(["my query", "--model", "local-model", "--provider", "ollama"])
+
+    assert captured == {"model": "local-model", "provider": "ollama"}
+    assert capsys.readouterr().out.strip() == "command-line answer"

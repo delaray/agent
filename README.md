@@ -78,6 +78,14 @@ openai = LlmClient(model="gpt-5-mini", provider="openai")
 Set `LLM_PROVIDER=openai` to make OpenAI the environment-wide default. An
 `OPENAI_API_KEY` is only needed for OpenAI calls.
 
+Run the agent as a script with a required query:
+
+```bash
+uv run python -m src.agent "What is 2 + 2?"
+uv run python -m src.agent "Summarize this topic" --model qwen3:8b
+uv run python -m src.agent "What is 2 + 2?" --provider openai --model gpt-5-mini
+```
+
 ## Chapters
 
 | Chapter | Topic | Key Modules |
