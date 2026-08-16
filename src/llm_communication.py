@@ -13,7 +13,7 @@ from src.types import ContentItem, Message, ToolCall, ToolResult
 
 
 # -----------------------------------------------------------------------
-# LLMRequest\
+# LLMRequest
 # -----------------------------------------------------------------------
 
 class LlmRequest(BaseModel):
@@ -136,7 +136,3 @@ class LlmClient:
                 "output_tokens": response.usage.completion_tokens,
             }
         )
-
-# ***********************************************************************
-# End of File
-# ***********************************************************************

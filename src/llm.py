@@ -1,3 +1,7 @@
+# ***********************************************************************
+# LLM Communication Layer
+# ***********************************************************************
+
 from typing import Any  # noqa: I001
 import json
 from dotenv import load_dotenv
@@ -49,7 +53,8 @@ class LlmClient:
         self.model = model
         self.config = config
 
-    async def generate(self, request: LlmRequest) -> LlmResponse:
+    async def generate(self, request: LlmRequest
+                       ) -> LlmResponse:
         """Generate a response from the LLM."""
         try:
             messages = self._build_messages(request)
@@ -65,8 +70,8 @@ class LlmClient:
                    if request.tool_choice else {}),
                 **self.config
             )
-
             return self._parse_response(response)
+
         except (ValueError, KeyError, RuntimeError) as e:
             return LlmResponse(error_message=str(e))
 
@@ -152,7 +157,9 @@ async def test_llm_client():
     # Build request
     request = LlmRequest(
         instructions=["You are a helpful assistant."],
-        contents=[Message(role="user", content="What is 2 + 2?")],
+        contents=[Message(
+            role="user",
+            content="What is 2 + 2?")],
         )
 
     # Generate response
@@ -161,4 +168,9 @@ async def test_llm_client():
     # Response contains the answer
     for item in response.content:
         if isinstance(item, Message):
-            print(item.content) # "4"
+            print(item.content)
+
+
+# ***********************************************************************
+# End of File
+# ***********************************************************************
