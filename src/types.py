@@ -68,9 +68,10 @@ class Event(BaseModel):
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     execution_id: str
-    timestamp: float = Field(default_factory=lambda: datetime.now().timestamp())
+    timestamp: float = \
+        Field(default_factory=lambda: datetime.now().timestamp())  # noqa: DTZ005
     author: str  # "user" or agent name
-    content: List[ContentItem] = Field(default_factory=list)
+    content: list[ContentItem] = Field(default_factory=list)
 
 
 # -----------------------------------------------------------------------------

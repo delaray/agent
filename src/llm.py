@@ -2,7 +2,7 @@ from typing import Any  # noqa: I001
 import json
 from dotenv import load_dotenv
 from litellm import acompletion
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
 from src.types import ContentItem, Message, ToolCall, ToolResult
 from src.tools import BaseTool
@@ -20,7 +20,10 @@ class LlmRequest(BaseModel):
 
     instructions: list[str] = Field(default_factory=list)
     contents: list[ContentItem] = Field(default_factory=list)
-    tools: list[BaseTool] = Field(default_factory=list)
+    # Agent normalizes callables to BaseTool instances. Skipping validation
+    # here avoids false failures when modules are reloaded in a notebook and
+    # Pydantic sees old and new copies of the same BaseTool class.
+    tools: list[SkipValidation[BaseTool]] = Field(default_factory=list)
     tool_choice: str | None = None
 
 
@@ -74,37 +77,38 @@ class LlmClient:
         for instruction in request.instructions:
             messages.append({"role": "system", "content": instruction})
 
-            for item in request.contents:
-                if isinstance(item, Message):
-                    messages.append(
-                        {"role": item.role, "content": item.content})
+        for item in request.contents:
+            if isinstance(item, Message):
+                messages.append(
+                    {"role": item.role, "content": item.content})
 
-                elif isinstance(item, ToolCall):
-                    tool_call_dict = {
-                        "id": item.tool_call_id,
-                        "type": "function",
-                        "function": {
-                            "name": item.name,
-                            "arguments": json.dumps(item.arguments)
-                        }
+            elif isinstance(item, ToolCall):
+                tool_call_dict = {
+                    "id": item.tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": item.name,
+                        "arguments": json.dumps(item.arguments)
                     }
-                    # Append to previous assistant message if exists
-                    if messages and messages[-1]["role"] == "assistant":
-                        messages[-1].setdefault("tool_calls", []
-                                                ).append(tool_call_dict)
-                    else:
-                        messages.append({
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [tool_call_dict]
-                        })
-
-                elif isinstance(item, ToolResult):
+                }
+                # Append to previous assistant message if exists
+                if messages and messages[-1]["role"] == "assistant":
+                    messages[-1].setdefault("tool_calls", []).append(
+                        tool_call_dict
+                    )
+                else:
                     messages.append({
-                        "role": "tool",
-                        "tool_call_id": item.tool_call_id,
-                        "content": str(item.content[0]) if item.content else ""
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [tool_call_dict]
                     })
+
+            elif isinstance(item, ToolResult):
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": item.tool_call_id,
+                    "content": str(item.content[0]) if item.content else ""
+                })
 
         return messages
 
@@ -119,13 +123,13 @@ class LlmClient:
                 content=choice.message.content
             ))
 
-            if choice.message.tool_calls:
-                for tc in choice.message.tool_calls:
-                    content_items.append(ToolCall(
-                        tool_call_id=tc.id,
-                        name=tc.function.name,
-                        arguments=json.loads(tc.function.arguments)
-                    ))
+        if choice.message.tool_calls:
+            for tc in choice.message.tool_calls:
+                content_items.append(ToolCall(
+                    tool_call_id=tc.id,
+                    name=tc.function.name,
+                    arguments=json.loads(tc.function.arguments)
+                ))
 
         return LlmResponse(
             content=content_items,

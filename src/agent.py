@@ -18,6 +18,7 @@ Differences from final version:
 
 import asyncio  # noqa: I001
 import logging  # noqa: I001, RUF100
+from collections.abc import Callable
 from typing import Any, Sequence, cast  # noqa: UP035
 
 from dotenv import load_dotenv
@@ -25,7 +26,9 @@ from pydantic import BaseModel
 
 from src.llm import LlmClient, LlmRequest, LlmResponse
 
-from src.tools import BaseTool, FunctionTool, format_tool_definition
+from src.tools import BaseTool, FunctionTool
+from src.tools import format_tool_definition, search_web
+from src.calculator import calculator
 from src.types import Event, Message, ToolCall, ToolResult
 from src.context import ExecutionContext, AgentResult
 
@@ -49,7 +52,7 @@ class Agent:
     def __init__(
         self,
         model: LlmClient,
-        tools: Sequence[BaseTool] | None = None,
+        tools: Sequence[BaseTool | Callable[..., Any]] | None = None,
         instructions: str = "",
         max_steps: int = 10,
         name: str = "agent",
@@ -108,6 +111,8 @@ class Agent:
         """Perform one think-act cycle."""
         llm_request = self._prepare_llm_request(context)
         llm_response = await self.think(llm_request)
+        if llm_response.error_message:
+            raise RuntimeError(f"LLM request failed: {llm_response.error_message}")
 
         if verbose:
             self._log_response(llm_response)
@@ -198,7 +203,9 @@ class Agent:
 
         return LlmRequest(
             instructions=instructions,
-            contents=flat_contents,
+            # Revalidate at the LLM boundary. This also avoids class identity
+            # mismatches after reloading modules in an interactive session.
+            contents=[item.model_dump() for item in flat_contents],
             tools=self.tools,
             tool_choice=tool_choice,
         )
@@ -237,9 +244,15 @@ class Agent:
                 return item.content
         return None
 
-    def _setup_tools(self, tools: list[BaseTool]) -> list[BaseTool]:
+    def _setup_tools(
+        self,
+        tools: list[BaseTool | Callable[..., Any]],
+    ) -> list[BaseTool]:
         """Prepare the tools list, including dynamic tools."""
-        tools = list(tools)
+        prepared_tools = [
+            item if isinstance(item, BaseTool) else FunctionTool(item)
+            for item in tools
+        ]
 
         if self.output_type is not None:
             output_schema = self.output_type.model_json_schema()
@@ -272,10 +285,10 @@ class Agent:
                 ),
                 tool_definition=tool_definition,
             )
-            tools.append(final_answer_tool)
+            prepared_tools.append(final_answer_tool)
             self.output_tool_name = "final_answer"
 
-        return tools
+        return prepared_tools
 
     def _log_response(self, response: LlmResponse):
         """Log LLM response for verbose mode."""
@@ -291,20 +304,42 @@ class Agent:
 # Test function for the agent
 # --------------------------------------------------------------------------- #
 
+test_query = \
+    """
+    If Eliud Kipchoge could maintain his official marathon world-record
+    time record-making marathon pace indefinitely, how many thousand
+    hours would it take him to run the distance between the Earth and
+    the Moon at its closest approach?
+    Please use the minimum perigee value on the Wikipedia page
+    for the Moon when carrying out your calculation. Round your
+    result to the nearest thousand hours.
+    """
+
+
 def test_agent():
     """Test the agent with a simple example."""
 
     # Initialize the agent
     llm_client = LlmClient(model="gpt-5-mini")
-    tools = []
+    tools = [calculator, search_web]
     agent = Agent(model=llm_client, tools=tools,
                   instructions="You are an assistant.")
 
-    # Run the agent with a simple input
-    result = asyncio.run(agent.run(user_input="What is 2 + 2?"))
-    
+    async def run_examples():
+        """Run every request on the same event loop."""
+        result1 = await agent.run(user_input="What is 2 + 2?")
+        result2 = await agent.run(user_input="What is 1255 * 1255?")
+        result3 = await agent.run(user_input=test_query)
+        return result1, result2, result3
+
+    result1, result2, result3 = asyncio.run(run_examples())
+
     # Print the final result
-    print("Final Result:", result.output)
+    print("\nFirst Result:", result1.output)
+    print("\nSecond Result:", result2.output)
+    print("\nThird Result:", result3.output)
+
+
 # -------------------------------------------------------------------------- #
 # End of File
 # -------------------------------------------------------------------------- #
