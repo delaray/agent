@@ -451,6 +451,11 @@ dependencies = [
     { name = "tqdm" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "aitils", git = "ssh://git@github.com/delaray/aitils?rev=main" },
@@ -478,6 +483,9 @@ requires-dist = [
     { name = "tiktoken", specifier = ">=0.7.0" },
     { name = "tqdm", specifier = ">=4.0" },
 ]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=9.0" }]
 
 [[package]]
 name = "cachetools"
