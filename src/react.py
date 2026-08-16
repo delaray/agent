@@ -236,11 +236,15 @@ class LlmResponse(BaseModel):
 # -----------------------------------------------------------------------
 
 class LlmClient:
-    """Client for LLM API calls using LiteLLM."""
+    """Compatibility client; use :class:`src.llm.LlmClient` in new code."""
 
-    def __init__(self, model: str, **config):
-        self.model = model
-        self.config = config
+    def __init__(self, model: str | None = None, provider=None, **config):
+        from src.ollama import resolve_llm_connection
+
+        connection = resolve_llm_connection(model, provider, **config)
+        self.provider = connection.provider
+        self.model = connection.model
+        self.config = connection.config
 
     async def generate(self, request: LlmRequest) -> LlmResponse:
         """Generate a response from the LLM."""
@@ -541,7 +545,7 @@ class SentimentAnalysis(BaseModel):
 
 async def analyze_sentiment(text: str) -> SentimentAnalysis:
     agent = Agent(
-        model=LlmClient(model="gpt-5.4-mini"),
+        model=LlmClient(),
         tools=[],
         instructions="Analyze the sentiment of the provided text.",
         output_type=SentimentAnalysis

@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
 from src.types import ContentItem, Message, ToolCall, ToolResult
 from src.tools import BaseTool
+from src.ollama import LlmProvider, resolve_llm_connection
 
 load_dotenv(override=True)
 
@@ -47,11 +48,18 @@ class LlmResponse(BaseModel):
 # -----------------------------------------------------------------------
 
 class LlmClient:
-    """Client for LLM API calls using LiteLLM."""
+    """LiteLLM client supporting Ollama (default) and OpenAI."""
 
-    def __init__(self, model: str, **config):
-        self.model = model
-        self.config = config
+    def __init__(
+        self,
+        model: str | None = None,
+        provider: LlmProvider | None = None,
+        **config,
+    ):
+        connection = resolve_llm_connection(model, provider, **config)
+        self.provider = connection.provider
+        self.model = connection.model
+        self.config = connection.config
 
     async def generate(self, request: LlmRequest
                        ) -> LlmResponse:
@@ -152,7 +160,7 @@ class LlmClient:
 async def test_llm_client():
     """Test the LlmClient with a simple prompt."""
     # Create client
-    client = LlmClient(model="gpt-5-mini")
+    client = LlmClient()
 
     # Build request
     request = LlmRequest(

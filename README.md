@@ -43,7 +43,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install dependencies
 uv sync
 
-# Set up API keys in .env
+# Set up LLM provider and API keys in .env
 cp .env.example .env
 # Edit .env and add your API keys
 
@@ -51,19 +51,32 @@ cp .env.example .env
 uv run jupyter lab
 ```
 
-## API Keys
+## LLM provider and API keys
 
 Create a `.env` file in the project root with the following keys:
 
 ```
-OPENAI_API_KEY=sk-...          # Required for all chapters
+LLM_PROVIDER=ollama            # Optional; Ollama is the default
+OLLAMA_NETWORK_HOST=http://host:11434
+OLLAMA_DEFAULT_MODEL=qwen3:8b
+
+OPENAI_API_KEY=sk-...          # Required only when using OpenAI
+OPENAI_DEFAULT_MODEL=gpt-5-mini
 ANTHROPIC_API_KEY=sk-ant-...   # Required for CH02 Anthropic examples
 TAVILY_API_KEY=tvly-...        # Required for CH03 web search
 HF_TOKEN=hf_...                # Required for CH02 GAIA benchmark
 E2B_API_KEY=e2b_...            # Required for CH08 code execution
 ```
 
-At minimum, you need `OPENAI_API_KEY` to follow along with the examples.
+`LlmClient()` uses Ollama by default. You can also select the provider in code:
+
+```python
+ollama = LlmClient()  # model and host come from .env
+openai = LlmClient(model="gpt-5-mini", provider="openai")
+```
+
+Set `LLM_PROVIDER=openai` to make OpenAI the environment-wide default. An
+`OPENAI_API_KEY` is only needed for OpenAI calls.
 
 ## Chapters
 

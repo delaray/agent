@@ -320,7 +320,7 @@ def test_agent():
     """Test the agent with a simple example."""
 
     # Initialize the agent
-    llm_client = LlmClient(model="gpt-5-mini")
+    llm_client = LlmClient()
     tools = [calculator, search_web]
     agent = Agent(model=llm_client, tools=tools,
                   instructions="You are an assistant.")
