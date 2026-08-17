@@ -23,7 +23,6 @@ import sys
 if __package__ in (None, ""):
     sys.path[0] = __file__.rsplit("/", 2)[0]
 
-import argparse  # noqa: I001
 import asyncio  # noqa: I001, RUF100
 import logging  # noqa: I001, RUF100
 from collections.abc import Callable
@@ -346,44 +345,6 @@ def test_agent():
     print("\nSecond Result:", result2.output)
     print("\nThird Result:", result3.output)
 
-
-def main(argv: Sequence[str] | None = None) -> None:
-    """Run the agent from the command line."""
-    parser = argparse.ArgumentParser(
-        description="Run a query through the tool-calling agent.",
-    )
-    parser.add_argument("query", help="Query to send to the agent")
-    parser.add_argument(
-        "--model",
-        help=(
-            "Model name. Defaults to OLLAMA_DEFAULT_MODEL for Ollama or "
-            "OPENAI_DEFAULT_MODEL for OpenAI."
-        ),
-    )
-    parser.add_argument(
-        "--provider",
-        choices=("ollama", "openai"),
-        help="LLM provider. Defaults to LLM_PROVIDER, or Ollama when unset.",
-    )
-    args = parser.parse_args(argv)
-
-    client = LlmClient(model=args.model, provider=args.provider)
-    agent = Agent(
-        model=client,
-        tools=[calculator, search_web],
-        instructions="You are a helpful assistant.",
-    )
-    try:
-        result = asyncio.run(agent.run(user_input=args.query))
-    except RuntimeError as error:
-        parser.exit(1, f"error: {error}\n")
-
-    if result.output is not None:
-        print(result.output)
-
-
-if __name__ == "__main__":
-    main()
 
 
 # -------------------------------------------------------------------------- #
