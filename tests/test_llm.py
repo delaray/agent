@@ -41,6 +41,12 @@ def test_parse_tool_call_without_text_content():
     assert result.usage_metadata == {"input_tokens": 11, "output_tokens": 7}
 
 
+def test_parse_empty_response_returns_error():
+    result = llm.LlmClient("test")._parse_response(api_response())
+
+    assert result.error_message == "The LLM returned an empty response."
+
+
 def test_generate_calls_litellm_and_converts_expected_errors(monkeypatch):
     async def successful(**kwargs):
         assert kwargs["model"] == "fake-model"
@@ -70,8 +76,22 @@ def test_ollama_is_default_and_uses_environment(monkeypatch):
     client = llm.LlmClient()
 
     assert client.provider == "ollama"
-    assert client.model == "ollama/qwen3:8b"
+    assert client.model == "ollama_chat/qwen3:8b"
     assert client.config["api_base"] == "http://ollama.local:11434"
+
+
+def test_ollama_bare_host_gets_scheme_and_default_port(monkeypatch):
+    monkeypatch.setenv("OLLAMA_NETWORK_HOST", "192.168.1.32")
+
+    client = llm.LlmClient("qwen3:8b")
+
+    assert client.config["api_base"] == "http://192.168.1.32:11434"
+
+
+def test_legacy_ollama_prefix_is_upgraded_to_chat(monkeypatch):
+    client = llm.LlmClient("ollama/qwen3:8b")
+
+    assert client.model == "ollama_chat/qwen3:8b"
 
 
 def test_provider_can_be_switched_to_openai(monkeypatch):

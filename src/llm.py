@@ -6,6 +6,7 @@ from typing import Any  # noqa: I001
 import json
 from dotenv import load_dotenv
 from litellm import acompletion
+from openai import OpenAIError
 from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
 from src.types import ContentItem, Message, ToolCall, ToolResult
@@ -80,7 +81,7 @@ class LlmClient:
             )
             return self._parse_response(response)
 
-        except (ValueError, KeyError, RuntimeError) as e:
+        except (ValueError, KeyError, RuntimeError, OpenAIError) as e:
             return LlmResponse(error_message=str(e))
 
     def _build_messages(self, request: LlmRequest) -> list[dict]:
@@ -143,6 +144,11 @@ class LlmClient:
                     name=tc.function.name,
                     arguments=json.loads(tc.function.arguments)
                 ))
+
+        if not content_items:
+            return LlmResponse(
+                error_message="The LLM returned an empty response."
+            )
 
         return LlmResponse(
             content=content_items,

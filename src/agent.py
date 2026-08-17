@@ -373,7 +373,11 @@ def main(argv: Sequence[str] | None = None) -> None:
         tools=[calculator, search_web],
         instructions="You are a helpful assistant.",
     )
-    result = asyncio.run(agent.run(user_input=args.query))
+    try:
+        result = asyncio.run(agent.run(user_input=args.query))
+    except RuntimeError as error:
+        parser.exit(1, f"error: {error}\n")
+
     if result.output is not None:
         print(result.output)
 

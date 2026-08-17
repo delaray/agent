@@ -1,8 +1,8 @@
 """Provider configuration for Ollama and OpenAI LLM calls.
 
-LiteLLM uses an ``ollama/`` model prefix for Ollama's native API.  Keeping
-that detail here lets the rest of the agent framework continue to use the
-OpenAI chat-completion message and tool formats for both providers.
+LiteLLM uses an ``ollama_chat/`` model prefix for Ollama's chat API. Keeping
+that detail here lets the rest of the agent framework use the same message
+and tool formats for both providers.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Any, Literal
+from urllib.parse import urlsplit, urlunsplit
 
 LlmProvider = Literal["ollama", "openai"]
 DEFAULT_PROVIDER: LlmProvider = "ollama"
@@ -22,6 +23,33 @@ class LlmConnection:
     provider: LlmProvider
     model: str
     config: dict[str, Any]
+
+
+def normalize_ollama_host(host: str) -> str:
+    """Return an absolute Ollama base URL, defaulting to port 11434."""
+    candidate = host.strip().rstrip("/")
+    if "://" not in candidate:
+        candidate = f"http://{candidate.lstrip('/')}"
+
+    parsed = urlsplit(candidate)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        raise ValueError(
+            "OLLAMA_NETWORK_HOST must be a hostname or an http(s) URL, for "
+            "example '192.168.1.32' or 'http://192.168.1.32:11434'"
+        )
+
+    try:
+        port = parsed.port
+    except ValueError as error:
+        raise ValueError(f"Invalid OLLAMA_NETWORK_HOST: {error}") from error
+
+    if port is None:
+        hostname = parsed.hostname
+        if ":" in hostname:
+            hostname = f"[{hostname}]"
+        parsed = parsed._replace(netloc=f"{hostname}:11434")
+
+    return urlunsplit(parsed).rstrip("/")
 
 
 def resolve_llm_connection(
@@ -49,12 +77,17 @@ def resolve_llm_connection(
                 "An Ollama model is required; pass model=... or set "
                 "OLLAMA_DEFAULT_MODEL"
             )
-        if not resolved_model.startswith("ollama/"):
-            resolved_model = f"ollama/{resolved_model}"
+        # The chat route is required for reliable message and tool-call
+        # handling. LiteLLM's ``ollama/`` route uses /api/generate, which can
+        # return an empty response when tools are supplied.
+        if resolved_model.startswith("ollama/"):
+            resolved_model = resolved_model.removeprefix("ollama/")
+        if not resolved_model.startswith("ollama_chat/"):
+            resolved_model = f"ollama_chat/{resolved_model}"
 
         host = os.getenv("OLLAMA_NETWORK_HOST")
         if host:
-            resolved_config.setdefault("api_base", host.rstrip("/"))
+            resolved_config.setdefault("api_base", normalize_ollama_host(host))
     else:
         resolved_model = model or os.getenv("OPENAI_DEFAULT_MODEL")
         if not resolved_model:
