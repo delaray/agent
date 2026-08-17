@@ -1,11 +1,13 @@
-import argparse
+import argparse  # noqa: I001
 import asyncio
 import logging
 import sys
+import pprint
 from typing import Any, Sequence  # noqa: UP035
 
 from dotenv import load_dotenv
 
+from src.utils import init_logging
 from src.agent import Agent
 from src.calculator import calculator
 
@@ -21,7 +23,7 @@ from src.tools import search_web
 load_dotenv(override=True)
 
 # Initialize logging
-logger = logging.getLogger(__name__)
+logger = init_logging("agent.log")
 
 
 # --------------------------------------------------------------------------- #
@@ -42,7 +44,7 @@ def run_agent(client: LlmClient, query: str,
     """
     agent = Agent(
         model=client,
-        tools=[calculator, search_web],
+        tools=tools,
         instructions="You are a helpful assistant.",
     )
 
@@ -57,6 +59,28 @@ def run_agent(client: LlmClient, query: str,
     else:
         print("No output or result returned.")
 
+    return result
+
+
+# --------------------------------------------------------------------------- #
+# CLI Argumernts
+# --------------------------------------------------------------------------- #
+
+parser = argparse.ArgumentParser(
+    description="Run a query through the tool-calling agent.",
+)
+
+parser.add_argument("query", help="Query to send to the agent")
+
+parser.add_argument("--model",
+                    default="qwen3.8:27b",
+                    help="Model name. Defaults to qwen3.8:27b "
+                    )
+
+parser.add_argument("--provider", choices=("ollama", "openai"),
+                    default="ollama",
+                    help="LLM provider. Defaults to ollama.",
+                    )
 
 # --------------------------------------------------------------------------- #
 # Main
@@ -64,22 +88,6 @@ def run_agent(client: LlmClient, query: str,
 
 def main(argv: Sequence[str] | None = None) -> None:
     """Run the agent from the command line."""
-    parser = argparse.ArgumentParser(
-        description="Run a query through the tool-calling agent.",
-    )
-    parser.add_argument("query", help="Query to send to the agent")
-    parser.add_argument(
-        "--model",
-        help=(
-            "Model name. Defaults to OLLAMA_DEFAULT_MODEL for Ollama or "
-            "OPENAI_DEFAULT_MODEL for OpenAI."
-        ),
-    )
-    parser.add_argument(
-        "--provider",
-        choices=("ollama", "openai"),
-        help="LLM provider. Defaults to LLM_PROVIDER, or Ollama when unset.",
-    )
     args = parser.parse_args(argv)
 
     query = args.query
@@ -89,7 +97,8 @@ def main(argv: Sequence[str] | None = None) -> None:
 
     result = run_agent(client, query, tools=tools)
 
-    print("Agent finished. Result:", result)
+    print("\n\nAgent finished.\nResult:")
+    pprint.pprint(result)
 
     return result
 
