@@ -5,6 +5,12 @@
 from typing import Any  # noqa: I001
 import json
 from dotenv import load_dotenv
+
+# LiteLLM reads startup settings while it is being imported, so the project
+# environment must be loaded first. This allows settings such as
+# LITELLM_LOCAL_MODEL_COST_MAP to prevent unnecessary remote metadata fetches.
+load_dotenv(override=True)
+
 from litellm import acompletion
 from openai import OpenAIError
 from pydantic import BaseModel, ConfigDict, Field, SkipValidation
@@ -12,8 +18,6 @@ from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 from src.types import ContentItem, Message, ToolCall, ToolResult
 from src.tools import BaseTool
 from src.ollama import LlmProvider, resolve_llm_connection
-
-load_dotenv(override=True)
 
 
 # -----------------------------------------------------------------------

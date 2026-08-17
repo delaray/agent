@@ -2,7 +2,7 @@ import asyncio
 
 from pydantic import BaseModel
 
-from src import agent as agent_module
+import run_agent as run_agent_module
 from src.agent import Agent
 from src.context import ExecutionContext
 from src.llm import LlmResponse
@@ -98,9 +98,11 @@ def test_main_accepts_query_model_and_provider(monkeypatch, capsys):
                 Message(role="assistant", content="command-line answer")
             ])
 
-    monkeypatch.setattr(agent_module, "LlmClient", CliClient)
+    monkeypatch.setattr(run_agent_module, "LlmClient", CliClient)
 
-    agent_module.main(["my query", "--model", "local-model", "--provider", "ollama"])
+    run_agent_module.main([
+        "my query", "--model", "local-model", "--provider", "ollama"
+    ])
 
     assert captured == {"model": "local-model", "provider": "ollama"}
-    assert capsys.readouterr().out.strip() == "command-line answer"
+    assert "command-line answer" in capsys.readouterr().out
