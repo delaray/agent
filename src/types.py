@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -72,6 +72,7 @@ class Event(BaseModel):
         Field(default_factory=lambda: datetime.now().timestamp())  # noqa: DTZ005
     author: str  # "user" or agent name
     content: list[ContentItem] = Field(default_factory=list)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 # -----------------------------------------------------------------------------

@@ -127,6 +127,7 @@ class Agent:
             execution_id=context.execution_id,
             author=self.name,
             content=llm_response.content,
+            metadata={"usage": llm_response.usage_metadata},
         )
         context.add_event(response_event)
 

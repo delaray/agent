@@ -86,6 +86,24 @@ uv run python -m src.agent "Summarize this topic" --model qwen3:8b
 uv run python -m src.agent "What is 2 + 2?" --provider openai --model gpt-5-mini
 ```
 
+## Agent Workbench GUI
+
+Launch the Streamlit workbench from the project root:
+
+```bash
+uv run streamlit run streamlit_app.py
+```
+
+The workbench provides:
+
+- Ollama/OpenAI provider and model selection, including discovery of models
+  installed on the configured Ollama server.
+- Sampling, token, timeout, seed, system-instruction, and maximum-step controls.
+- Per-run tool selection and a browsable tool-schema catalog.
+- Persistent chat-style results for the current browser session.
+- A detailed execution timeline containing model messages, tool parameters,
+  tool results, timing, token usage, raw event payloads, and JSON export.
+
 ## Chapters
 
 | Chapter | Topic | Key Modules |

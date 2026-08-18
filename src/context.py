@@ -8,6 +8,7 @@ Differences from final version:
 from __future__ import annotations  # noqa: I001
 import uuid
 from dataclasses import dataclass, field
+from collections.abc import Callable
 from typing import Any
 from pydantic import BaseModel
 
@@ -26,10 +27,16 @@ class ExecutionContext:
     current_step: int = 0
     state: dict[str, Any] = field(default_factory=dict)
     final_result: str | BaseModel | None = None
+    event_handlers: list[Callable[[Event], None]] = field(
+        default_factory=list,
+        repr=False,
+    )
 
     def add_event(self, event: Event):
         """Append an event to the execution history."""
         self.events.append(event)
+        for handler in self.event_handlers:
+            handler(event)
 
     def increment_step(self):
         """Move to the next execution step."""
@@ -48,4 +55,3 @@ class AgentResult:
 # --------------------------------------------------------------------------- #
 # End of File
 # --------------------------------------------------------------------------- #
-

@@ -21,9 +21,10 @@ class FakeClient:
 
 
 def test_agent_returns_direct_response_and_wraps_callable_tools():
-    client = FakeClient([LlmResponse(content=[
-        Message(role="assistant", content="four")
-    ])])
+    client = FakeClient([LlmResponse(
+        content=[Message(role="assistant", content="four")],
+        usage_metadata={"input_tokens": 3, "output_tokens": 1},
+    )])
     agent = Agent(client, tools=[lambda value: value], instructions="help")
 
     result = asyncio.run(agent.run("What is 2 + 2?"))
@@ -31,6 +32,7 @@ def test_agent_returns_direct_response_and_wraps_callable_tools():
     assert result.output == "four"
     assert isinstance(agent.tools[0], FunctionTool)
     assert client.requests[0].tool_choice == "auto"
+    assert result.context.events[1].metadata["usage"]["input_tokens"] == 3
 
 
 def test_agent_executes_tool_then_returns_final_response():

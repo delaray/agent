@@ -23,7 +23,7 @@ from src.tools import search_web
 load_dotenv(override=True)
 
 # Initialize logging
-logger = init_logging("agent.log")
+logger = init_logging(log_dir="logs", log_file="agent.log")
 
 
 # --------------------------------------------------------------------------- #
@@ -82,6 +82,7 @@ parser.add_argument("--provider", choices=("ollama", "openai"),
                     help="LLM provider. Defaults to ollama.",
                     )
 
+
 # --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
@@ -98,7 +99,7 @@ def main(argv: Sequence[str] | None = None) -> None:
     result = run_agent(client, query, tools=tools)
 
     print("\n\nAgent finished.\nResult:")
-    pprint.pprint(result)
+    print(result)
 
     return result
 
