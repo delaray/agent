@@ -34,18 +34,18 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-      :root { --accent: #65d6c3; --ink: #e8f0ef; --muted: #91a5a3; }
-      .stApp { background: radial-gradient(circle at 80% -20%, #173c43 0%, #0b151a 36%, #081015 75%); }
-      [data-testid="stSidebar"] { background: linear-gradient(180deg, #0d1b21 0%, #091318 100%); border-right: 1px solid #20343a; }
+      :root { --accent: #73ead5; --ink: #f7fbfa; --muted: #c7d4d2; }
+      .stApp { background: radial-gradient(circle at 80% -20%, #173c43 0%, #0b151a 36%, #081015 75%); color: var(--ink); }
+      [data-testid="stSidebar"] { background: linear-gradient(180deg, #0d1b21 0%, #091318 100%); border-right: 1px solid #20343a; color: var(--ink); }
       .workbench-kicker { color: var(--accent); font: 700 .72rem/1.2 monospace; letter-spacing: .16em; text-transform: uppercase; }
       .workbench-title { margin: .25rem 0 0; font-size: clamp(2rem, 4vw, 3.6rem); letter-spacing: -.055em; line-height: 1; }
       .workbench-subtitle { color: var(--muted); max-width: 760px; margin-top: .75rem; }
-      .status-pill { display: inline-flex; gap: .45rem; align-items: center; border: 1px solid #29434a; border-radius: 999px; padding: .25rem .65rem; color: #b9ccca; font-size: .78rem; }
+      .status-pill { display: inline-flex; gap: .45rem; align-items: center; border: 1px solid #416169; border-radius: 999px; padding: .25rem .65rem; color: #e5efed; font-size: .78rem; }
       .status-dot { width: .45rem; height: .45rem; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px var(--accent); }
       [data-testid="stMetric"] { background: rgba(16, 32, 38, .72); border: 1px solid #223b42; padding: .8rem 1rem; border-radius: 12px; }
       [data-testid="stChatMessage"] { border: 1px solid rgba(72, 108, 113, .32); border-radius: 14px; background: rgba(11, 24, 29, .58); }
-      .trace-meta { color: #78918f; font: .72rem/1.4 monospace; text-transform: uppercase; letter-spacing: .06em; }
-      .tool-chip { display: inline-block; border: 1px solid #31525a; color: #9ddbd1; border-radius: 999px; padding: .1rem .5rem; margin: 0 .25rem .25rem 0; font-size: .72rem; }
+      .trace-meta { color: #b9cac7; font: .72rem/1.4 monospace; text-transform: uppercase; letter-spacing: .06em; }
+      .tool-chip { display: inline-block; border: 1px solid #41666e; color: #c5f3eb; border-radius: 999px; padding: .1rem .5rem; margin: 0 .25rem .25rem 0; font-size: .72rem; }
       div.stButton > button { border-radius: 10px; }
       footer { visibility: hidden; }
     </style>
@@ -162,7 +162,7 @@ def render_sidebar() -> dict[str, Any]:
         left.metric("Runs", len(st.session_state.runs))
         active_tools = right.metric("Tools", len(selected_tools))
         del active_tools
-        if st.button("Clear workspace", use_container_width=True):
+        if st.button("Clear workspace", width="stretch"):
             st.session_state.runs = []
             st.rerun()
 
