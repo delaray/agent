@@ -1,6 +1,7 @@
 import asyncio
-import pytest
 from types import SimpleNamespace
+
+import pytest
 
 from src import llm
 from src.types import Message, ToolCall, ToolResult

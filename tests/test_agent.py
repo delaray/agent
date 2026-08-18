@@ -4,7 +4,6 @@ from pydantic import BaseModel
 
 import run_agent as run_agent_module
 from src.agent import Agent
-from src.context import ExecutionContext
 from src.llm import LlmResponse
 from src.tools import FunctionTool
 from src.types import Message, ToolCall

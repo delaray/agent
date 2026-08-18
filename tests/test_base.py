@@ -1,7 +1,6 @@
 import asyncio
 
 from scratch_agents.context import ExecutionContext
-
 from src.base import FunctionTool, tool
 
 

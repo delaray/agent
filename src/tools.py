@@ -256,15 +256,15 @@ def function_to_input_schema(func) -> dict:
         prop = {}
         hint = hints.get(name)
 
-        if hint == str:
+        if hint is str:
             prop["type"] = "string"
-        elif hint == int:
+        elif hint is int:
             prop["type"] = "integer"
-        elif hint == float:
+        elif hint is float:
             prop["type"] = "number"
-        elif hint == bool:
+        elif hint is bool:
             prop["type"] = "boolean"
-        elif hint == list or (
+        elif hint is list or (
             hint
             and (
                 hasattr(hint, "__origin__")
@@ -279,9 +279,9 @@ def function_to_input_schema(func) -> dict:
                 and hint.__args__
             ):
                 item_type = hint.__args__[0]
-                if item_type == str:
+                if item_type is str:
                     prop["items"] = {"type": "string"}
-                elif item_type == int:
+                elif item_type is int:
                     prop["items"] = {"type": "integer"}
                 elif hasattr(item_type, "model_json_schema"):
                     prop["items"] = item_type.model_json_schema()

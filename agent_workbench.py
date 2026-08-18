@@ -15,7 +15,7 @@ from dotenv import load_dotenv
 
 from src.agent import Agent
 from src.calculator import calculator
-from src.context import AgentResult, ExecutionContext
+from src.context import ExecutionContext
 from src.llm import LlmClient
 from src.ollama import normalize_ollama_host
 from src.tools import FunctionTool, search_web

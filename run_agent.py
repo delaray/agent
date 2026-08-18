@@ -1,8 +1,6 @@
 import argparse  # noqa: I001
 import asyncio
-import logging
 import sys
-import pprint
 from typing import Any, Sequence  # noqa: UP035
 
 from dotenv import load_dotenv

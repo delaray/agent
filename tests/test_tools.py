@@ -3,8 +3,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.context import ExecutionContext
 from src import tools
+from src.context import ExecutionContext
 
 
 def test_function_schema_and_definition_cover_supported_types():
