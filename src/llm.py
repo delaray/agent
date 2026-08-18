@@ -1,13 +1,23 @@
+# ***********************************************************************
+# LLM Communication Layer
+# ***********************************************************************
+
 from typing import Any  # noqa: I001
 import json
 from dotenv import load_dotenv
+
+# LiteLLM reads startup settings while it is being imported, so the project
+# environment must be loaded first. This allows settings such as
+# LITELLM_LOCAL_MODEL_COST_MAP to prevent unnecessary remote metadata fetches.
+load_dotenv(override=True)
+
 from litellm import acompletion
+from openai import OpenAIError
 from pydantic import BaseModel, ConfigDict, Field, SkipValidation
 
 from src.types import ContentItem, Message, ToolCall, ToolResult
 from src.tools import BaseTool
-
-load_dotenv(override=True)
+from src.ollama import LlmProvider, resolve_llm_connection
 
 
 # -----------------------------------------------------------------------
@@ -43,13 +53,21 @@ class LlmResponse(BaseModel):
 # -----------------------------------------------------------------------
 
 class LlmClient:
-    """Client for LLM API calls using LiteLLM."""
+    """LiteLLM client supporting Ollama (default) and OpenAI."""
 
-    def __init__(self, model: str, **config):
-        self.model = model
-        self.config = config
+    def __init__(
+        self,
+        model: str | None = None,
+        provider: LlmProvider | None = None,
+        **config,
+    ):
+        connection = resolve_llm_connection(model, provider, **config)
+        self.provider = connection.provider
+        self.model = connection.model
+        self.config = connection.config
 
-    async def generate(self, request: LlmRequest) -> LlmResponse:
+    async def generate(self, request: LlmRequest
+                       ) -> LlmResponse:
         """Generate a response from the LLM."""
         try:
             messages = self._build_messages(request)
@@ -65,9 +83,9 @@ class LlmClient:
                    if request.tool_choice else {}),
                 **self.config
             )
-
             return self._parse_response(response)
-        except (ValueError, KeyError, RuntimeError) as e:
+
+        except (ValueError, KeyError, RuntimeError, OpenAIError) as e:
             return LlmResponse(error_message=str(e))
 
     def _build_messages(self, request: LlmRequest) -> list[dict]:
@@ -131,6 +149,11 @@ class LlmClient:
                     arguments=json.loads(tc.function.arguments)
                 ))
 
+        if not content_items:
+            return LlmResponse(
+                error_message="The LLM returned an empty response."
+            )
+
         return LlmResponse(
             content=content_items,
             usage_metadata={
@@ -147,12 +170,14 @@ class LlmClient:
 async def test_llm_client():
     """Test the LlmClient with a simple prompt."""
     # Create client
-    client = LlmClient(model="gpt-5-mini")
+    client = LlmClient()
 
     # Build request
     request = LlmRequest(
         instructions=["You are a helpful assistant."],
-        contents=[Message(role="user", content="What is 2 + 2?")],
+        contents=[Message(
+            role="user",
+            content="What is 2 + 2?")],
         )
 
     # Generate response
@@ -161,4 +186,9 @@ async def test_llm_client():
     # Response contains the answer
     for item in response.content:
         if isinstance(item, Message):
-            print(item.content) # "4"
+            print(item.content)
+
+
+# ***********************************************************************
+# End of File
+# ***********************************************************************

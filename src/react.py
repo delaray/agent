@@ -2,11 +2,9 @@
 import asyncio  # noqa: I001
 import inspect
 import json
-import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Literal
 
 from dotenv import load_dotenv
@@ -100,15 +98,16 @@ class FunctionTool(BaseTool):
         self.func = func
         self.needs_context = 'context' in inspect.signature(func).parameters
 
-        name = name or func.__name__
-        description = description or (func.__doc__ or "").strip()
-        tool_definition = tool_definition or self._generate_definition()
+        resolved_name = name or func.__name__
+        resolved_description = description or (func.__doc__ or "").strip()
 
         super().__init__(
-            name=name,
-            description=description,
+            name=resolved_name,
+            description=resolved_description,
             tool_definition=tool_definition
         )
+        if self._tool_definition is None:
+            self._tool_definition = self._generate_definition()
 
     async def execute(self, context: ExecutionContext, **kwargs) -> Any:
         """Execute the wrapped function."""
@@ -235,11 +234,15 @@ class LlmResponse(BaseModel):
 # -----------------------------------------------------------------------
 
 class LlmClient:
-    """Client for LLM API calls using LiteLLM."""
+    """Compatibility client; use :class:`src.llm.LlmClient` in new code."""
 
-    def __init__(self, model: str, **config):
-        self.model = model
-        self.config = config
+    def __init__(self, model: str | None = None, provider=None, **config):
+        from src.ollama import resolve_llm_connection
+
+        connection = resolve_llm_connection(model, provider, **config)
+        self.provider = connection.provider
+        self.model = connection.model
+        self.config = connection.config
 
     async def generate(self, request: LlmRequest) -> LlmResponse:
         """Generate a response from the LLM."""
@@ -269,37 +272,37 @@ class LlmClient:
         for instruction in request.instructions:
             messages.append({"role": "system", "content": instruction})
 
-            for item in request.contents:
-                if isinstance(item, Message):
-                    messages.append(
-                        {"role": item.role, "content": item.content})
+        for item in request.contents:
+            if isinstance(item, Message):
+                messages.append(
+                    {"role": item.role, "content": item.content})
 
-                elif isinstance(item, ToolCall):
-                    tool_call_dict = {
-                        "id": item.tool_call_id,
-                        "type": "function",
-                        "function": {
-                            "name": item.name,
-                            "arguments": json.dumps(item.arguments)
-                        }
+            elif isinstance(item, ToolCall):
+                tool_call_dict = {
+                    "id": item.tool_call_id,
+                    "type": "function",
+                    "function": {
+                        "name": item.name,
+                        "arguments": json.dumps(item.arguments)
                     }
-                    # Append to previous assistant message if exists
-                    if messages and messages[-1]["role"] == "assistant":
-                        messages[-1].setdefault("tool_calls", []
-                                                ).append(tool_call_dict)
-                    else:
-                        messages.append({
-                            "role": "assistant",
-                            "content": None,
-                            "tool_calls": [tool_call_dict]
-                        })
-
-                elif isinstance(item, ToolResult):
+                }
+                if messages and messages[-1]["role"] == "assistant":
+                    messages[-1].setdefault("tool_calls", []).append(
+                        tool_call_dict
+                    )
+                else:
                     messages.append({
-                        "role": "tool",
-                        "tool_call_id": item.tool_call_id,
-                        "content": str(item.content[0]) if item.content else ""
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [tool_call_dict]
                     })
+
+            elif isinstance(item, ToolResult):
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": item.tool_call_id,
+                    "content": str(item.content[0]) if item.content else ""
+                })
 
         return messages
 
@@ -314,13 +317,13 @@ class LlmClient:
                 content=choice.message.content
             ))
 
-            if choice.message.tool_calls:
-                for tc in choice.message.tool_calls:
-                    content_items.append(ToolCall(
-                        tool_call_id=tc.id,
-                        name=tc.function.name,
-                        arguments=json.loads(tc.function.arguments)
-                    ))
+        if choice.message.tool_calls:
+            for tc in choice.message.tool_calls:
+                content_items.append(ToolCall(
+                    tool_call_id=tc.id,
+                    name=tc.function.name,
+                    arguments=json.loads(tc.function.arguments)
+                ))
 
         return LlmResponse(
             content=content_items,
@@ -486,7 +489,7 @@ class Agent:
             )
             context.add_event(tool_event)
 
-            context.increment_step()
+        context.increment_step()
 
     async def think(self, llm_request: LlmRequest) -> LlmResponse:
         return await self.model.generate(llm_request)
@@ -540,7 +543,7 @@ class SentimentAnalysis(BaseModel):
 
 async def analyze_sentiment(text: str) -> SentimentAnalysis:
     agent = Agent(
-        model=LlmClient(model="gpt-5.4-mini"),
+        model=LlmClient(),
         tools=[],
         instructions="Analyze the sentiment of the provided text.",
         output_type=SentimentAnalysis

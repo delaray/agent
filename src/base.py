@@ -10,10 +10,8 @@ import inspect
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict
 
-from pydantic import BaseModel
-
-from scratch_agents.tools.helpers import format_tool_definition, function_to_input_schema
 from scratch_agents.context import ExecutionContext
+from scratch_agents.tools.helpers import format_tool_definition, function_to_input_schema
 
 
 class BaseTool(ABC):

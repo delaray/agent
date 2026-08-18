@@ -1,0 +1,154 @@
+name: CI/CD
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13"
+  UV_VERSION: "0.8.0"
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  quality:
+    name: Lint and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --frozen --dev
+
+      - name: Lint
+        run: uv run ruff check src tests agent_workbench.py run_agent.py
+
+      - name: Test
+        run: uv run pytest -q
+
+  image:
+    name: Build and publish image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: quality
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.image.outputs.image }}
+      tag: ${{ steps.image.outputs.tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set image coordinates
+        id: image
+        shell: bash
+        run: |
+          image="${IMAGE_NAME,,}"
+          echo "image=${image}" >> "${GITHUB_OUTPUT}"
+          echo "tag=sha-${GITHUB_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.image.outputs.image }}:${{ steps.image.outputs.tag }}
+            ${{ steps.image.outputs.image }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: image
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Check out deployment script
+        uses: actions/checkout@v4
+
+      - name: Configure SSH
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          test -n "${DEPLOY_HOST}" || { echo "DEPLOY_HOST is required"; exit 1; }
+          test -n "${DEPLOY_SSH_KEY}" || { echo "DEPLOY_SSH_KEY is required"; exit 1; }
+          port="${DEPLOY_PORT:-22}"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "${DEPLOY_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -p "${port}" "${DEPLOY_HOST}" >> ~/.ssh/known_hosts
+
+      - name: Copy deployment script
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          port="${DEPLOY_PORT:-22}"
+          scp -i ~/.ssh/deploy_key -P "${port}" \
+            scripts/deploy.sh "${DEPLOY_USER}@${DEPLOY_HOST}:/tmp/deploy-agent.sh"
+
+      - name: Authenticate remote Docker host
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          GHCR_USERNAME: ${{ secrets.GHCR_USERNAME }}
+          GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+        run: |
+          test -n "${GHCR_USERNAME}" || { echo "GHCR_USERNAME is required"; exit 1; }
+          test -n "${GHCR_TOKEN}" || { echo "GHCR_TOKEN is required"; exit 1; }
+          port="${DEPLOY_PORT:-22}"
+          printf '%s' "${GHCR_TOKEN}" | ssh -i ~/.ssh/deploy_key -p "${port}" \
+            "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "docker login ghcr.io --username '${GHCR_USERNAME}' --password-stdin"
+
+      - name: Replace production container
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
+          APP_PORT: ${{ vars.APP_PORT }}
+          IMAGE: ${{ needs.image.outputs.image }}
+          TAG: ${{ needs.image.outputs.tag }}
+        run: |
+          port="${DEPLOY_PORT:-22}"
+          app_port="${APP_PORT:-8501}"
+          env_file="${DEPLOY_ENV_FILE:-/opt/agent/.env}"
+          ssh -i ~/.ssh/deploy_key -p "${port}" "${DEPLOY_USER}@${DEPLOY_HOST}" \
+            "chmod +x /tmp/deploy-agent.sh && IMAGE_NAME='${IMAGE}' IMAGE_TAG='${TAG}' PORT='${app_port}' ENV_FILE='${env_file}' /tmp/deploy-agent.sh --pull"

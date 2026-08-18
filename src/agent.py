@@ -16,7 +16,14 @@ Differences from final version:
   - _prepare_llm_request(): sandbox/skills prompt not present
 """
 
-import asyncio  # noqa: I001
+# Direct execution puts ``src/`` first on sys.path, which would make
+# ``src/types.py`` shadow Python's standard-library ``types`` module.
+import sys
+
+if __package__ in (None, ""):
+    sys.path[0] = __file__.rsplit("/", 2)[0]
+
+import asyncio  # noqa: I001, RUF100
 import logging  # noqa: I001, RUF100
 from collections.abc import Callable
 from typing import Any, Sequence, cast  # noqa: UP035
@@ -25,7 +32,6 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from src.llm import LlmClient, LlmRequest, LlmResponse
-
 from src.tools import BaseTool, FunctionTool
 from src.tools import format_tool_definition, search_web
 from src.calculator import calculator
@@ -121,6 +127,7 @@ class Agent:
             execution_id=context.execution_id,
             author=self.name,
             content=llm_response.content,
+            metadata={"usage": llm_response.usage_metadata},
         )
         context.add_event(response_event)
 
@@ -320,7 +327,7 @@ def test_agent():
     """Test the agent with a simple example."""
 
     # Initialize the agent
-    llm_client = LlmClient(model="gpt-5-mini")
+    llm_client = LlmClient()
     tools = [calculator, search_web]
     agent = Agent(model=llm_client, tools=tools,
                   instructions="You are an assistant.")
@@ -338,6 +345,7 @@ def test_agent():
     print("\nFirst Result:", result1.output)
     print("\nSecond Result:", result2.output)
     print("\nThird Result:", result3.output)
+
 
 
 # -------------------------------------------------------------------------- #
