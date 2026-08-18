@@ -61,6 +61,8 @@ def to_jsonable(value: Any) -> Any:
     return str(value)
 
 
+# -------------------------------------------------------------------
+
 def classify_event(event: Event) -> str:
     """Return a concise trace category for an execution event."""
     if any(isinstance(item, ToolCall) for item in event.content):
@@ -76,6 +78,8 @@ def classify_event(event: Event) -> str:
         return "assistant"
     return "event"
 
+
+# -------------------------------------------------------------------
 
 def summarize_event(event: Event) -> str:
     """Create a readable one-line summary for an execution trace."""

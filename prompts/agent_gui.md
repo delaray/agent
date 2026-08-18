@@ -26,3 +26,8 @@ Your task is to build a GUI for the agent module. The GUI should serve several p
 4. Add utilities and helper functions to utils.py as needed
 5. Make the GUI professional looking and intuitive to use
 6. Be creative and your design intuitions.
+
+# -----------------------------------------------------------------------------
+
+# First Bug Fix
+It looks great. The only thing that needs changing is the foreground color of the whitish text. It needs to be brighter as it is really hard to see/read even on a very darkl background.
